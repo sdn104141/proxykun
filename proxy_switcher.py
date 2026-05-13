@@ -371,31 +371,10 @@ def create_gui():
 
     root = tk.Tk()
     root.title("プロキシｸﾝ")
-    root.geometry("460x680")
-    root.resizable(False, True)
+    root.resizable(False, False)
 
-    # スクロール可能なメインエリア
-    canvas = tk.Canvas(root, highlightthickness=0)
-    scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
-    canvas.configure(yscrollcommand=scrollbar.set)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    main_frame = tk.Frame(canvas, padx=12, pady=8)
-    canvas_win = canvas.create_window((0, 0), window=main_frame, anchor="nw")
-
-    def on_frame_configure(event):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-
-    def on_canvas_configure(event):
-        canvas.itemconfig(canvas_win, width=event.width)
-
-    def on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    main_frame.bind("<Configure>", on_frame_configure)
-    canvas.bind("<Configure>", on_canvas_configure)
-    canvas.bind_all("<MouseWheel>", on_mousewheel)
+    main_frame = tk.Frame(root, padx=12, pady=8)
+    main_frame.pack(fill=tk.BOTH, expand=True)
 
     SECTION = dict(pady=6, fill=tk.X)
     BTN_W = 18
@@ -406,8 +385,9 @@ def create_gui():
         f.pack(**SECTION)
         return f
 
-    def make_listbox(parent, height=4):
-        lb = tk.Listbox(parent, selectmode=tk.SINGLE, width=46, height=height,
+    def make_listbox(parent):
+        lb = tk.Listbox(parent, selectmode=tk.SINGLE, width=46,
+                        height=max(len(PROXY_LIST), 2),
                         activestyle="dotbox", relief="solid", bd=1)
         for proxy in PROXY_LIST:
             lb.insert(tk.END, proxy)
@@ -465,7 +445,7 @@ def create_gui():
     tk.Entry(entry_row, textvariable=entry_var, width=28).pack(side=tk.LEFT, padx=6)
     tk.Label(entry_row, text="例: 172.20.1.1:8080", fg="#888888").pack(side=tk.LEFT)
 
-    mgmt_listbox = make_listbox(mgmt_sec, height=4)
+    mgmt_listbox = make_listbox(mgmt_sec)
 
     add_row = tk.Frame(mgmt_sec)
     add_row.pack(pady=(0, 4))
