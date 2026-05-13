@@ -1,0 +1,10 @@
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Config (contains local paths)
+config.ini
+
+# Claude Code
+.claude/
