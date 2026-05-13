@@ -85,11 +85,12 @@ import os
 # iniファイルのパス
 INI_FILE_PATH = "config.ini"
 
-# プロキシリスト
-PROXY_LIST = [
+DEFAULT_PROXY_LIST = [
     "172.20.15.153:8080",
     "172.20.4.3:8080",
 ]
+
+PROXY_LIST = []
 
 # 現在のシステムプロキシ設定をレジストリから取得する関数
 def get_system_proxy_status():
@@ -162,6 +163,59 @@ def load_ini():
 def save_ini(config):
     with open(INI_FILE_PATH, "w", encoding="utf-8") as configfile:
         config.write(configfile)
+
+# プロキシリストをiniから読み込む関数
+def load_proxy_list():
+    global PROXY_LIST
+    config = load_ini()
+    raw = config["Settings"].get("proxylist", "")
+    if raw.strip():
+        PROXY_LIST = [p.strip() for p in raw.split(",") if p.strip()]
+    else:
+        PROXY_LIST = list(DEFAULT_PROXY_LIST)
+
+# プロキシリストをiniに保存する関数
+def save_proxy_list():
+    config = load_ini()
+    config["Settings"]["proxylist"] = ",".join(PROXY_LIST)
+    save_ini(config)
+
+# 全リストボックスをリフレッシュする関数
+def refresh_all_listboxes():
+    for lb in (listbox, npm_listbox, env_listbox, mgmt_listbox):
+        lb.delete(0, tk.END)
+        for proxy in PROXY_LIST:
+            lb.insert(tk.END, proxy)
+
+# プロキシを追加する関数
+def add_proxy():
+    value = entry_var.get().strip()
+    if not value:
+        messagebox.showwarning("警告", "IPアドレスを入力してください")
+        return
+    if ":" not in value:
+        messagebox.showwarning("警告", "形式は「IPアドレス:ポート」で入力してください\n例: 172.20.15.153:8080")
+        return
+    if value in PROXY_LIST:
+        messagebox.showwarning("警告", "すでに登録されています")
+        return
+    PROXY_LIST.append(value)
+    save_proxy_list()
+    refresh_all_listboxes()
+    entry_var.set("")
+
+# プロキシを削除する関数
+def remove_proxy():
+    selected = mgmt_listbox.curselection()
+    if not selected:
+        messagebox.showwarning("警告", "削除するアドレスを選択してください")
+        return
+    if len(PROXY_LIST) <= 1:
+        messagebox.showwarning("警告", "リストは1件以上必要です")
+        return
+    PROXY_LIST.pop(selected[0])
+    save_proxy_list()
+    refresh_all_listboxes()
 
 # batファイルを実行する関数
 def run_bat_file():
@@ -313,6 +367,8 @@ def select_bat_file():
 
 # GUIの作成
 def create_gui():
+    load_proxy_list()
+
     root = tk.Tk()
     root.title("プロキシｸﾝ")
     root.geometry("460x680")
@@ -350,9 +406,8 @@ def create_gui():
         f.pack(**SECTION)
         return f
 
-    def make_listbox(parent, height=None):
-        h = height if height else len(PROXY_LIST)
-        lb = tk.Listbox(parent, selectmode=tk.SINGLE, width=46, height=h,
+    def make_listbox(parent, height=4):
+        lb = tk.Listbox(parent, selectmode=tk.SINGLE, width=46, height=height,
                         activestyle="dotbox", relief="solid", bd=1)
         for proxy in PROXY_LIST:
             lb.insert(tk.END, proxy)
@@ -398,6 +453,26 @@ def create_gui():
     env_listbox = make_listbox(env_sec)
     make_btn_row(env_sec, "環境変数 ON", set_env_proxy,
                  "環境変数 OFF", disable_env_proxy)
+
+    # ── IPリスト管理 ──────────────────────────────
+    mgmt_sec = make_section(main_frame, "IPリスト管理")
+    global mgmt_listbox, entry_var
+    entry_var = tk.StringVar()
+
+    entry_row = tk.Frame(mgmt_sec)
+    entry_row.pack(fill=tk.X, pady=(0, 4))
+    tk.Label(entry_row, text="追加:").pack(side=tk.LEFT)
+    tk.Entry(entry_row, textvariable=entry_var, width=28).pack(side=tk.LEFT, padx=6)
+    tk.Label(entry_row, text="例: 172.20.1.1:8080", fg="#888888").pack(side=tk.LEFT)
+
+    mgmt_listbox = make_listbox(mgmt_sec, height=4)
+
+    add_row = tk.Frame(mgmt_sec)
+    add_row.pack(pady=(0, 4))
+    tk.Button(add_row, text="追加", command=add_proxy, width=BTN_W,
+              bg="#c3e6cb", activebackground="#a3d9a5").pack(side=tk.LEFT, padx=6)
+    tk.Button(add_row, text="削除", command=remove_proxy, width=BTN_W,
+              bg="#f5c6cb", activebackground="#e09ba1").pack(side=tk.LEFT, padx=6)
 
     # ── BAT ファイル ──────────────────────────────
     bat_sec = make_section(main_frame, "BAT ファイル")
