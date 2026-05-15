@@ -2,6 +2,10 @@
 
 社内ネットワーク向けのプロキシ切り替えツールです。
 
+## ダウンロード
+
+**[Releases ページ](../../releases/latest)** から `proxy_switcher.zip` をダウンロードして解凍し、`proxy_switcher.exe` をダブルクリックするだけで使えます。インストール不要です。
+
 ## 機能
 
 | セクション | 内容 |
@@ -21,9 +25,11 @@
 
 ## 使い方
 
-### EXEを使う場合
+### EXEを使う場合（推奨）
 
-`dist/proxy_switcher/proxy_switcher.exe` をダブルクリックで起動します。
+1. [Releases ページ](../../releases/latest) から `proxy_switcher.zip` をダウンロード
+2. 任意の場所に解凍
+3. `proxy_switcher.exe` をダブルクリックで起動
 
 ### Pythonから直接実行する場合
 
