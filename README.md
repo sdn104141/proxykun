@@ -39,10 +39,10 @@ python proxy_switcher.py
 
 ## EXE化の方法
 
-### 1. PyInstallerのインストール
+### 1. 依存ライブラリのインストール
 
 ```
-pip install pyinstaller
+pip install pyinstaller Pillow
 ```
 
 ### 2. ビルド
