@@ -1,0 +1,36 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 依存パッケージインストール
+        run: pip install pyinstaller
+
+      - name: PyInstaller でビルド
+        run: pyinstaller proxy_switcher.spec
+
+      - name: ZIP 作成
+        run: |
+          Compress-Archive -Path dist\proxy_switcher\* -DestinationPath proxy_switcher.zip
+
+      - name: GitHub Release 作成 & アセットアップロード
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: proxy_switcher.zip
