@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
 
       - name: 依存パッケージインストール
-        run: pip install pyinstaller
+        run: pip install pyinstaller pillow
 
       - name: PyInstaller でビルド
         run: pyinstaller proxy_switcher.spec
