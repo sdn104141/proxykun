@@ -1,5 +1,15 @@
-import winreg
 import ctypes
+# Windows DPI スケーリング対応（文字ぼやけ防止）—— tkinter より前に宣言
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)   # Per-Monitor DPI Aware v2 (Win10+)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()    # フォールバック
+    except Exception:
+        pass
+
+import winreg
+import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import subprocess
@@ -75,7 +85,7 @@ def save_visibility():
 
 def apply_visibility():
     """section_framesをvisibility_varsに従ってpack/pack_forgetし直す"""
-    PACK_OPTS = dict(pady=6, fill=tk.X)
+    PACK_OPTS = dict(pady=6, fill=tk.X, padx=10)
     for key, _ in SECTION_KEYS:
         frame = section_frames.get(key)
         if frame:
@@ -84,32 +94,40 @@ def apply_visibility():
         frame = section_frames.get(key)
         if frame and visibility_vars[key].get():
             frame.pack(**PACK_OPTS)
-    # ウィンドウサイズをコンテンツに合わせて自動調整
     root_ref.update_idletasks()
-    root_ref.geometry("")
     save_visibility()
 
 def open_visibility_settings():
-    """表示設定ダイアログを開く"""
-    dialog = tk.Toplevel(root_ref)
+    """表示設定ダイアログ（ctk版）"""
+    dialog = ctk.CTkToplevel(root_ref)
     dialog.title("表示設定")
+    dialog.configure(fg_color=PANEL_BG)
     dialog.resizable(False, False)
     dialog.grab_set()
-    dialog.focus_set()
+    dialog.after(50, dialog.focus_set)
 
-    tk.Label(dialog, text="表示するセクションを選択してください",
-             font=("", 9), pady=6).pack(padx=20, anchor="w")
+    ctk.CTkLabel(dialog, text="SECTIONS",
+                 text_color=TEXT2,
+                 font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(
+                     padx=24, pady=(16, 8), anchor="w")
 
     for key, label in SECTION_KEYS:
-        tk.Checkbutton(
+        ctk.CTkCheckBox(
             dialog, text=label,
             variable=visibility_vars[key],
             command=apply_visibility,
-            anchor="w", width=30
-        ).pack(padx=20, pady=2, anchor="w")
+            text_color=TEXT1,
+            fg_color=BTN_NEU_H,
+            hover_color=BTN_NEU,
+            checkmark_color="#ffffff",
+            font=ctk.CTkFont("Meiryo UI", 10),
+        ).pack(padx=24, pady=3, anchor="w")
 
-    tk.Button(dialog, text="閉じる", command=dialog.destroy,
-              width=12).pack(pady=10)
+    ctk.CTkButton(dialog, text="閉じる",
+                  command=dialog.destroy,
+                  fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+                  corner_radius=20, height=42, width=130,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(pady=(14, 18))
 
 # ─────────────────────────────────────────────────
 # プロキシ共通
@@ -469,11 +487,11 @@ def refresh_vpn_list_ui():
 
 def toggle_password_visibility():
     if vpn_pass_entry.cget("show") == "*":
-        vpn_pass_entry.config(show="")
-        vpn_toggle_btn.config(text="非表示")
+        vpn_pass_entry.configure(show="")
+        vpn_toggle_btn.configure(text="非表示")
     else:
-        vpn_pass_entry.config(show="*")
-        vpn_toggle_btn.config(text="表示")
+        vpn_pass_entry.configure(show="*")
+        vpn_toggle_btn.configure(text="表示")
 
 def connect_vpn_action():
     selected = vpn_listbox.curselection()
@@ -547,26 +565,158 @@ def disconnect_vpn_action():
     threading.Thread(target=do_disconnect, daemon=True).start()
 
 # ─────────────────────────────────────────────────
-# GUI 構築
+# Liquid Glass テーマ
+# ─────────────────────────────────────────────────
+
+
+BG        = "#ccddf0"   # ライトブルー（グラデーション背景フォールバック）
+PANEL_BG  = "#f0f5ff"   # ほぼ白のガラスパネル
+PANEL_BD  = "#aac4e0"   # 薄い青ボーダー
+TEXT1     = "#1a2540"   # ダークネイビー（読みやすい）
+TEXT2     = "#5570a0"   # ミディアムブルーグレー
+BTN_ON    = "#1a7a40"
+BTN_ON_H  = "#22943d"
+BTN_OFF   = "#b03030"
+BTN_OFF_H = "#cc3838"
+BTN_NEU   = "#4068b0"   # ブルーガラスボタン
+BTN_NEU_H = "#3058a0"
+LB_BG     = "#e4eefa"   # 薄い水色リストボックス
+LB_SEL    = "#4068b0"
+STATUS_OK = "#1a7a40"   # ダークグリーン
+STATUS_NG = "#5570a0"   # TEXT2 と同じ
+APP_NAME  = "プロキシｸﾝ"
+
+
+def _draw_gradient(canvas, w, h):
+    """グラデーション背景（ライトスカイブルー → ソフトラベンダー）"""
+    if w <= 1 or h <= 1:
+        return
+    canvas.delete("all")
+    for y in range(0, h, 2):
+        t = y / max(h - 1, 1)
+        r = int(0xd0 * (1 - t) + 0xe0 * t)   # d0=208 → e0=224
+        g = int(0xe4 * (1 - t) + 0xd4 * t)   # e4=228 → d4=212
+        b = int(0xf8 * (1 - t) + 0xf8 * t)   # f8=248 → f8=248（青みを保持）
+        canvas.create_line(0, y, w, y + 1, fill=f"#{r:02x}{g:02x}{b:02x}")
+
+
+def _status_lbl(parent, text, fg=None):
+    """ビジネスロジックから .config(text=, fg=) で更新できる tk.Label"""
+    lbl = tk.Label(parent, text=text,
+                   bg=PANEL_BG, fg=fg or STATUS_NG,
+                   font=("Meiryo UI", 11, "bold"), anchor="w")
+    lbl.pack(fill=tk.X, padx=16, pady=(6, 2))
+    return lbl
+
+
+def _make_lb(parent, height=3):
+    """Listbox を CTkFrame でラップして返す"""
+    frame = ctk.CTkFrame(parent, fg_color=LB_BG,
+                         corner_radius=10,
+                         border_width=1, border_color=PANEL_BD)
+    lb = tk.Listbox(frame,
+                    selectmode=tk.SINGLE,
+                    width=42, height=max(len(PROXY_LIST), height),
+                    bg=LB_BG, fg=TEXT1,
+                    selectbackground=LB_SEL, selectforeground="#ffffff",
+                    activestyle="none", relief="flat", bd=0,
+                    font=("Meiryo UI", 11),
+                    highlightthickness=0)
+    lb.pack(padx=6, pady=6, fill=tk.X)
+    frame.pack(pady=(2, 8), fill=tk.X, padx=14)
+    return lb
+
+
+def _btn_row(parent, l_txt, l_cmd, r_txt, r_cmd):
+    """ピル形のボタン 2 つを並べる行"""
+    row = ctk.CTkFrame(parent, fg_color="transparent")
+    row.pack(pady=(2, 14))
+    ctk.CTkButton(row, text=l_txt, command=l_cmd,
+                  fg_color=BTN_ON, hover_color=BTN_ON_H,
+                  corner_radius=22, height=44, width=185,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.LEFT, padx=6)
+    ctk.CTkButton(row, text=r_txt, command=r_cmd,
+                  fg_color=BTN_OFF, hover_color=BTN_OFF_H,
+                  corner_radius=22, height=44, width=185,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.LEFT, padx=6)
+
+
+def _section(parent, key, title):
+    """フロストガラスパネル"""
+    f = ctk.CTkFrame(parent,
+                     fg_color=PANEL_BG,
+                     corner_radius=22,
+                     border_width=1,
+                     border_color=PANEL_BD)
+    ctk.CTkLabel(f, text=title,
+                 text_color=TEXT1,
+                 font=ctk.CTkFont("Meiryo UI", 11, "bold")).pack(
+                     anchor="w", padx=16, pady=(14, 4))
+    section_frames[key] = f
+    return f
+
+
+# ─────────────────────────────────────────────────
+# 表示設定ダイアログ
+# ─────────────────────────────────────────────────
+
+def open_visibility_settings():
+    dialog = ctk.CTkToplevel(root_ref)
+    dialog.title("表示設定")
+    dialog.configure(fg_color=PANEL_BG)
+    dialog.resizable(False, False)
+    dialog.grab_set()
+    dialog.after(60, dialog.focus_set)
+
+    ctk.CTkLabel(dialog, text="SECTIONS",
+                 text_color=TEXT2,
+                 font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(
+                     padx=24, pady=(16, 8), anchor="w")
+
+    for key, label in SECTION_KEYS:
+        ctk.CTkCheckBox(
+            dialog, text=label,
+            variable=visibility_vars[key],
+            command=apply_visibility,
+            text_color=TEXT1,
+            fg_color=BTN_NEU_H,
+            hover_color=BTN_NEU,
+            checkmark_color="#ffffff",
+            font=ctk.CTkFont("Meiryo UI", 10),
+        ).pack(padx=24, pady=3, anchor="w")
+
+    ctk.CTkButton(dialog, text="閉じる",
+                  command=dialog.destroy,
+                  fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+                  corner_radius=20, height=42, width=130,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(pady=(14, 18))
+
+
+# ─────────────────────────────────────────────────
+# スプラッシュ・メインウィンドウ
 # ─────────────────────────────────────────────────
 
 def show_splash(root):
-    """スプラッシュ画面を表示して返す（root の Toplevel として作成）"""
     splash = tk.Toplevel(root)
-    splash.overrideredirect(True)      # タイトルバーなし
-    splash.configure(bg="#1e1e2e")
+    splash.overrideredirect(True)
+    splash.configure(bg=BG)
     splash.attributes("-topmost", True)
-    w, h = 320, 130
-    sw = splash.winfo_screenwidth()
-    sh = splash.winfo_screenheight()
-    splash.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+    w, h = 300, 120
+    sw, sh = splash.winfo_screenwidth(), splash.winfo_screenheight()
+    splash.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
-    tk.Label(splash, text="プロキシｸﾝ", font=("", 22, "bold"),
-             bg="#1e1e2e", fg="#ffffff").pack(expand=True, pady=(24, 4))
-    tk.Label(splash, text="読み込み中…", font=("", 9),
-             bg="#1e1e2e", fg="#888888").pack(pady=(0, 20))
+    inner = tk.Frame(splash, bg=PANEL_BG,
+                     highlightbackground=PANEL_BD, highlightthickness=2)
+    inner.place(relx=0, rely=0, relwidth=1, relheight=1)
+    tk.Label(inner, text=APP_NAME,
+             font=("Meiryo UI", 22, "bold"),
+             bg=PANEL_BG, fg=TEXT1).pack(expand=True, pady=(22, 4))
+    tk.Label(inner, text="読み込み中…",
+             font=("Meiryo UI", 10),
+             bg=PANEL_BG, fg=TEXT2).pack(pady=(0, 18))
     splash.update()
     return splash
+
 
 
 def create_gui():
@@ -579,167 +729,230 @@ def create_gui():
     global vpn_status_label, vpn_listbox
     global vpn_user_var, vpn_pass_var, vpn_pass_entry, vpn_toggle_btn
 
-    # メインウィンドウを先に作成し非表示にする（これが Tk ルート）
-    root = tk.Tk()
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
     root_ref = root
-    root.title("プロキシｸﾝ")
+    root.title(APP_NAME)
+    root.configure(fg_color=BG)
+    root.geometry("520x760")
+    root.minsize(480, 500)
     root.withdraw()
+    # アイコン設定（CTk初期化完了後に適用）
+    ico_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+    if os.path.exists(ico_path):
+        root.after(100, lambda: root.iconbitmap(ico_path))
 
-    # ── スプラッシュ表示（root の子として）────
     splash = show_splash(root)
-
     load_proxy_list()
     config = load_ini()
-
-    # 表示設定を読み込む（BooleanVarはroot生成後に作る必要あり）
     load_visibility(config)
 
-    # ─── ヘッダー（表示設定ボタン）───────────────
-    header = tk.Frame(root, padx=12, pady=4, bg="#f0f0f0")
+    # ── ヘッダー ──────────────────────────────────
+    header = ctk.CTkFrame(root, fg_color=PANEL_BG,
+                          corner_radius=0, height=64)
     header.pack(fill=tk.X)
-    tk.Label(header, text="プロキシｸﾝ", font=("", 11, "bold"),
-             bg="#f0f0f0").pack(side=tk.LEFT)
-    tk.Button(header, text="⚙ 表示設定",
-              command=open_visibility_settings,
-              relief="flat", bg="#d8d8d8", activebackground="#c0c0c0",
-              padx=8).pack(side=tk.RIGHT)
+    header.pack_propagate(False)
+    ctk.CTkLabel(header, text=APP_NAME,
+                 font=ctk.CTkFont("Meiryo UI", 17, "bold"),
+                 text_color=TEXT1).pack(side=tk.LEFT, padx=20)
+    ctk.CTkButton(header, text="⚙  表示設定",
+                  command=open_visibility_settings,
+                  fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+                  text_color="#ffffff",
+                  corner_radius=20, height=38, width=130,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(
+                      side=tk.RIGHT, padx=14)
 
-    tk.Frame(root, height=1, bg="#cccccc").pack(fill=tk.X)  # 区切り線
+    # 区切り線
+    ctk.CTkFrame(root, fg_color=PANEL_BD,
+                 height=1, corner_radius=0).pack(fill=tk.X)
 
-    main_frame = tk.Frame(root, padx=12, pady=8)
-    main_frame.pack(fill=tk.BOTH, expand=True)
-
-    BTN_W = 18
+    # ── スクロール可能なコンテンツエリア ──────────
+    scroll = ctk.CTkScrollableFrame(root, fg_color=BG, corner_radius=0)
+    scroll.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
     def make_section(key, title):
-        f = tk.LabelFrame(main_frame, text=f"  {title}  ", padx=10, pady=8,
-                          font=("", 9, "bold"))
-        section_frames[key] = f
-        return f
-
-    def make_listbox(parent):
-        lb = tk.Listbox(parent, selectmode=tk.SINGLE, width=46,
-                        height=max(len(PROXY_LIST), 2),
-                        activestyle="dotbox", relief="solid", bd=1)
-        for proxy in PROXY_LIST:
-            lb.insert(tk.END, proxy)
-        lb.pack(pady=(4, 6))
-        return lb
-
-    def make_btn_row(parent, left_text, left_cmd, right_text, right_cmd):
-        row = tk.Frame(parent)
-        row.pack(pady=(0, 4))
-        tk.Button(row, text=left_text, command=left_cmd, width=BTN_W,
-                  bg="#c3e6cb", activebackground="#a3d9a5").pack(side=tk.LEFT, padx=6)
-        tk.Button(row, text=right_text, command=right_cmd, width=BTN_W,
-                  bg="#f5c6cb", activebackground="#e09ba1").pack(side=tk.LEFT, padx=6)
-
-    def make_status(parent, text, fg="#555555"):
-        lbl = tk.Label(parent, text=text, anchor="w", fg=fg)
-        lbl.pack(fill=tk.X, pady=(0, 2))
-        return lbl
+        return _section(scroll, key, title)
 
     # ── システムプロキシ ──────────────────────────
     proxy_sec = make_section("systemproxy", "システムプロキシ")
-    current_system = get_system_proxy_status()
-    system_status_label = make_status(proxy_sec,
-        f"現在: {current_system}" if current_system else "現在: 無効")
-    listbox = make_listbox(proxy_sec)
-    make_btn_row(proxy_sec, "プロキシを設定", set_system_proxy,
-                 "プロキシを無効化", disable_system_proxy)
+    cur = get_system_proxy_status()
+    system_status_label = _status_lbl(
+        proxy_sec,
+        f"現在: {cur}" if cur else "現在: 無効",
+        fg=STATUS_OK if cur else STATUS_NG)
+    listbox = _make_lb(proxy_sec)
+    for p in PROXY_LIST:
+        listbox.insert(tk.END, p)
+    _btn_row(proxy_sec,
+             "プロキシを設定", set_system_proxy,
+             "プロキシを無効化", disable_system_proxy)
 
     # ── npm プロキシ ──────────────────────────────
     npm_sec = make_section("npmproxy", "npm プロキシ")
-    current_npm = get_npm_proxy_status()
-    npm_status_label = make_status(npm_sec,
-        f"現在: {current_npm}" if current_npm else "現在: 無効")
-    npm_listbox = make_listbox(npm_sec)
-    make_btn_row(npm_sec, "npm プロキシ ON", set_npm_proxy,
-                 "npm プロキシ OFF", disable_npm_proxy)
+    cur = get_npm_proxy_status()
+    npm_status_label = _status_lbl(
+        npm_sec,
+        f"現在: {cur}" if cur else "現在: 無効",
+        fg=STATUS_OK if cur else STATUS_NG)
+    npm_listbox = _make_lb(npm_sec)
+    for p in PROXY_LIST:
+        npm_listbox.insert(tk.END, p)
+    _btn_row(npm_sec,
+             "npm プロキシ ON", set_npm_proxy,
+             "npm プロキシ OFF", disable_npm_proxy)
 
     # ── 環境変数プロキシ ──────────────────────────
     env_sec = make_section("envproxy", "環境変数プロキシ  (Claude Code用)")
-    current_env = get_env_proxy_status()
-    env_status_label = make_status(env_sec,
-        f"現在: {current_env}" if current_env else "現在: 無効")
-    env_listbox = make_listbox(env_sec)
-    make_btn_row(env_sec, "環境変数 ON", set_env_proxy,
-                 "環境変数 OFF", disable_env_proxy)
+    cur = get_env_proxy_status()
+    env_status_label = _status_lbl(
+        env_sec,
+        f"現在: {cur}" if cur else "現在: 無効",
+        fg=STATUS_OK if cur else STATUS_NG)
+    env_listbox = _make_lb(env_sec)
+    for p in PROXY_LIST:
+        env_listbox.insert(tk.END, p)
+    _btn_row(env_sec,
+             "環境変数 ON", set_env_proxy,
+             "環境変数 OFF", disable_env_proxy)
 
-    # ── IPリスト管理 ──────────────────────────────
-    mgmt_sec = make_section("iplist", "IPリスト管理")
+    # ── IP リスト管理 ─────────────────────────────
+    mgmt_sec = make_section("iplist", "IP リスト管理")
     entry_var = tk.StringVar()
-    entry_row = tk.Frame(mgmt_sec)
-    entry_row.pack(fill=tk.X, pady=(0, 4))
-    tk.Label(entry_row, text="追加:").pack(side=tk.LEFT)
-    tk.Entry(entry_row, textvariable=entry_var, width=28).pack(side=tk.LEFT, padx=6)
-    tk.Label(entry_row, text="例: 172.20.1.1:8080", fg="#888888").pack(side=tk.LEFT)
-    mgmt_listbox = make_listbox(mgmt_sec)
-    add_row = tk.Frame(mgmt_sec)
-    add_row.pack(pady=(0, 4))
-    tk.Button(add_row, text="追加", command=add_proxy, width=BTN_W,
-              bg="#c3e6cb", activebackground="#a3d9a5").pack(side=tk.LEFT, padx=6)
-    tk.Button(add_row, text="削除", command=remove_proxy, width=BTN_W,
-              bg="#f5c6cb", activebackground="#e09ba1").pack(side=tk.LEFT, padx=6)
+    erow = ctk.CTkFrame(mgmt_sec, fg_color="transparent")
+    erow.pack(fill=tk.X, padx=14, pady=(4, 4))
+    ctk.CTkLabel(erow, text="追加:", text_color=TEXT2,
+                 font=ctk.CTkFont("Meiryo UI", 10)).pack(side=tk.LEFT)
+    ctk.CTkEntry(erow, textvariable=entry_var, width=200,
+                 fg_color=LB_BG, border_color=PANEL_BD,
+                 text_color=TEXT1, corner_radius=10,
+                 placeholder_text="172.20.1.1:8080",
+                 font=ctk.CTkFont("Meiryo UI", 10)).pack(
+                     side=tk.LEFT, padx=8)
+    mgmt_listbox = _make_lb(mgmt_sec)
+    for p in PROXY_LIST:
+        mgmt_listbox.insert(tk.END, p)
+    _btn_row(mgmt_sec, "追加", add_proxy, "削除", remove_proxy)
 
     # ── VPN 接続 ──────────────────────────────────
     vpn_sec = make_section("vpn", "VPN 接続")
-    vpn_top_row = tk.Frame(vpn_sec)
-    vpn_top_row.pack(fill=tk.X, pady=(0, 4))
-    current_vpn = get_vpn_connection_status()
-    vpn_status_label = tk.Label(vpn_top_row,
-        text=f"接続中: {current_vpn}" if current_vpn else "現在: 未接続",
-        anchor="w", fg="#1a7a1a" if current_vpn else "#555555")
+    vrow = ctk.CTkFrame(vpn_sec, fg_color="transparent")
+    vrow.pack(fill=tk.X, padx=14, pady=(4, 4))
+    cur = get_vpn_connection_status()
+    vpn_status_label = tk.Label(
+        vrow,
+        text=f"接続中: {cur}" if cur else "現在: 未接続",
+        anchor="w", bg=PANEL_BG,
+        fg=STATUS_OK if cur else STATUS_NG,
+        font=("Meiryo UI", 11, "bold"),
+        cursor="arrow")
     vpn_status_label.pack(side=tk.LEFT)
-    tk.Button(vpn_top_row, text="一覧を更新", command=refresh_vpn_list_ui,
-              width=10).pack(side=tk.RIGHT)
+    ctk.CTkButton(vrow, text="一覧を更新",
+                  command=refresh_vpn_list_ui,
+                  fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+                  text_color="#ffffff",
+                  corner_radius=16, height=36, width=120,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.RIGHT)
+
     vpn_list = get_vpn_list()
-    vpn_listbox = tk.Listbox(vpn_sec, selectmode=tk.SINGLE, width=46,
-                              height=max(len(vpn_list), 3),
-                              activestyle="dotbox", relief="solid", bd=1)
+    vpn_lb_f = ctk.CTkFrame(vpn_sec, fg_color=LB_BG,
+                             corner_radius=10,
+                             border_width=1, border_color=PANEL_BD)
+    vpn_listbox = tk.Listbox(
+        vpn_lb_f,
+        selectmode=tk.SINGLE,
+        width=42, height=max(len(vpn_list) if vpn_list else 1, 3),
+        bg=LB_BG, fg=TEXT1,
+        selectbackground=LB_SEL, selectforeground="#ffffff",
+        activestyle="none", relief="flat", bd=0,
+        font=("Meiryo UI", 11), highlightthickness=0)
     if vpn_list:
         for name in vpn_list:
             vpn_listbox.insert(tk.END, name)
     else:
         vpn_listbox.insert(tk.END, "（VPN接続が見つかりません）")
-    vpn_listbox.pack(pady=(0, 6))
-    saved_vpn_name = config["Settings"].get("vpnname", "")
-    if saved_vpn_name in vpn_list:
-        vpn_listbox.selection_set(vpn_list.index(saved_vpn_name))
-    user_row = tk.Frame(vpn_sec)
-    user_row.pack(fill=tk.X, pady=(0, 4))
-    tk.Label(user_row, text="ユーザー名:", width=11, anchor="w").pack(side=tk.LEFT)
+    vpn_listbox.pack(padx=5, pady=5, fill=tk.X)
+    vpn_lb_f.pack(pady=(2, 8), fill=tk.X, padx=14)
+
+    saved = config["Settings"].get("vpnname", "")
+    if saved in vpn_list:
+        vpn_listbox.selection_set(vpn_list.index(saved))
+
+    def _inp(parent, label_text, var, show=""):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill=tk.X, padx=14, pady=(0, 4))
+        ctk.CTkLabel(row, text=label_text, width=84, anchor="w",
+                     text_color=TEXT2,
+                     font=ctk.CTkFont("Meiryo UI", 10)).pack(side=tk.LEFT)
+        e = ctk.CTkEntry(row, textvariable=var, show=show, width=200,
+                         fg_color=LB_BG, border_color=PANEL_BD,
+                         text_color=TEXT1, corner_radius=10,
+                         font=ctk.CTkFont("Meiryo UI", 10))
+        e.pack(side=tk.LEFT, padx=6)
+        return e
+
     vpn_user_var = tk.StringVar(value=config["Settings"].get("vpnuser", ""))
-    tk.Entry(user_row, textvariable=vpn_user_var, width=28).pack(side=tk.LEFT, padx=6)
-    pass_row = tk.Frame(vpn_sec)
-    pass_row.pack(fill=tk.X, pady=(0, 6))
-    tk.Label(pass_row, text="パスワード:", width=11, anchor="w").pack(side=tk.LEFT)
+    _inp(vpn_sec, "ユーザー名:", vpn_user_var)
+
     vpn_pass_var = tk.StringVar(value=config["Settings"].get("vpnpass", ""))
-    vpn_pass_entry = tk.Entry(pass_row, textvariable=vpn_pass_var, show="*", width=28)
+    prow = ctk.CTkFrame(vpn_sec, fg_color="transparent")
+    prow.pack(fill=tk.X, padx=14, pady=(0, 6))
+    ctk.CTkLabel(prow, text="パスワード:", width=84, anchor="w",
+                 text_color=TEXT2,
+                 font=ctk.CTkFont("Meiryo UI", 10)).pack(side=tk.LEFT)
+    vpn_pass_entry = ctk.CTkEntry(
+        prow, textvariable=vpn_pass_var, show="*", width=200,
+        fg_color=LB_BG, border_color=PANEL_BD,
+        text_color=TEXT1, corner_radius=10,
+        font=ctk.CTkFont("Meiryo UI", 10))
     vpn_pass_entry.pack(side=tk.LEFT, padx=6)
-    vpn_toggle_btn = tk.Button(pass_row, text="表示", width=6,
-                                command=toggle_password_visibility)
+    vpn_toggle_btn = ctk.CTkButton(
+        prow, text="表示",
+        command=toggle_password_visibility,
+        fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+        text_color="#ffffff",
+        corner_radius=14, height=36, width=76,
+        font=ctk.CTkFont("Meiryo UI", 10, "bold"))
     vpn_toggle_btn.pack(side=tk.LEFT)
-    make_btn_row(vpn_sec, "接続", connect_vpn_action, "切断", disconnect_vpn_action)
+    _btn_row(vpn_sec, "接続", connect_vpn_action, "切断", disconnect_vpn_action)
 
     # ── BAT ファイル ──────────────────────────────
     bat_sec = make_section("batfile", "BAT ファイル")
     bat_path = config["Settings"].get("batpath", "")
-    bat_label = tk.Label(bat_sec,
-                         text=("設定: " + bat_path) if bat_path else "batファイルが設定されていません",
-                         wraplength=400, anchor="w", fg="#555555", justify="left")
-    bat_label.pack(fill=tk.X, pady=(0, 4))
-    make_btn_row(bat_sec, "ファイルを選択", select_bat_file,
-                 "ファイルを実行", run_bat_file)
+    bat_label = tk.Label(
+        bat_sec,
+        text=("\u8a2d\u5b9a: " + bat_path) if bat_path else "BAT \u30d5\u30a1\u30a4\u30eb\u304c\u8a2d\u5b9a\u3055\u308c\u3066\u3044\u307e\u305b\u3093",
+        wraplength=360, anchor="w",
+        bg=PANEL_BG, fg=TEXT2,
+        font=("Meiryo UI", 11), justify="left")
+    bat_label.pack(fill=tk.X, padx=16, pady=(4, 0))
+    _btn_row(bat_sec,
+             "\u30d5\u30a1\u30a4\u30eb\u3092\u9078\u629e", select_bat_file,
+             "\u30d5\u30a1\u30a4\u30eb\u3092\u5b9f\u884c", run_bat_file)
 
-    # ── 初期表示を適用・スプラッシュを閉じてメイン表示 ──
+    # \u2500\u2500 \u521d\u671f\u8868\u793a \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     apply_visibility()
     splash.destroy()
-    root.deiconify()
-    root.lift()
-    root.focus_force()
-
+    root.after(20, root.deiconify)
+    root.after(30, root.lift)
+    root.after(30, root.focus_force)
     root.mainloop()
 
+
 if __name__ == "__main__":
-    create_gui()
+    try:
+        create_gui()
+    except Exception:
+        import traceback
+        err = traceback.format_exc()
+        with open("error.log", "w", encoding="utf-8") as _f:
+            _f.write(err)
+        try:
+            _r = tk.Tk()
+            _r.withdraw()
+            messagebox.showerror("起動エラー", err)
+            _r.destroy()
+        except Exception:
+            pass
