@@ -7,6 +7,9 @@ import configparser
 import threading
 import os
 
+# subprocess でコンソールウィンドウを非表示にするフラグ
+NOWND = subprocess.CREATE_NO_WINDOW
+
 # iniファイルのパス
 INI_FILE_PATH = "config.ini"
 
@@ -220,7 +223,7 @@ def remove_proxy():
 def get_npm_proxy_status():
     try:
         result = subprocess.run("npm config get proxy",
-                                capture_output=True, text=True, timeout=5, shell=True)
+                                capture_output=True, text=True, timeout=5, shell=True, creationflags=NOWND)
         value = result.stdout.strip()
         return value if value and value != "null" else None
     except Exception:
@@ -233,8 +236,8 @@ def set_npm_proxy():
             messagebox.showwarning("警告", "プロキシを選択してください")
             return
         proxy_url = f"http://{PROXY_LIST[selected[0]]}"
-        subprocess.run(f"npm config set proxy {proxy_url}", check=True, timeout=10, shell=True)
-        subprocess.run(f"npm config set https-proxy {proxy_url}", check=True, timeout=10, shell=True)
+        subprocess.run(f"npm config set proxy {proxy_url}", check=True, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run(f"npm config set https-proxy {proxy_url}", check=True, timeout=10, shell=True, creationflags=NOWND)
         npm_status_label.config(text=f"現在: {proxy_url}")
         messagebox.showinfo("成功", f"npmプロキシを設定しました:\n{proxy_url}")
     except FileNotFoundError:
@@ -244,8 +247,8 @@ def set_npm_proxy():
 
 def disable_npm_proxy():
     try:
-        subprocess.run("npm config delete proxy", check=True, timeout=10, shell=True)
-        subprocess.run("npm config delete https-proxy", check=True, timeout=10, shell=True)
+        subprocess.run("npm config delete proxy", check=True, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run("npm config delete https-proxy", check=True, timeout=10, shell=True, creationflags=NOWND)
         npm_status_label.config(text="現在: 無効")
         messagebox.showinfo("成功", "npmプロキシを無効にしました")
     except FileNotFoundError:
@@ -411,7 +414,7 @@ def get_vpn_list():
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_cmd],
             capture_output=True, text=True, timeout=15
-        )
+        , creationflags=NOWND)
         seen, unique = set(), []
         for line in result.stdout.splitlines():
             name = line.strip()
@@ -435,7 +438,7 @@ def get_vpn_connection_status():
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_cmd],
             capture_output=True, text=True, timeout=10
-        )
+        , creationflags=NOWND)
         lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
         return lines[0] if lines else None
     except Exception:
@@ -530,7 +533,7 @@ def disconnect_vpn_action():
             result = subprocess.run(
                 ["rasdial", vpn_name, "/disconnect"],
                 capture_output=True, text=True, timeout=20
-            )
+            , creationflags=NOWND)
             if result.returncode == 0:
                 root_ref.after(0, lambda: vpn_status_label.config(text="未接続", fg="#555555"))
                 root_ref.after(0, lambda: messagebox.showinfo("成功", f"VPNを切断しました:\n{vpn_name}"))
@@ -547,6 +550,25 @@ def disconnect_vpn_action():
 # GUI 構築
 # ─────────────────────────────────────────────────
 
+def show_splash(root):
+    """スプラッシュ画面を表示して返す（root の Toplevel として作成）"""
+    splash = tk.Toplevel(root)
+    splash.overrideredirect(True)      # タイトルバーなし
+    splash.configure(bg="#1e1e2e")
+    splash.attributes("-topmost", True)
+    w, h = 320, 130
+    sw = splash.winfo_screenwidth()
+    sh = splash.winfo_screenheight()
+    splash.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    tk.Label(splash, text="プロキシｸﾝ", font=("", 22, "bold"),
+             bg="#1e1e2e", fg="#ffffff").pack(expand=True, pady=(24, 4))
+    tk.Label(splash, text="読み込み中…", font=("", 9),
+             bg="#1e1e2e", fg="#888888").pack(pady=(0, 20))
+    splash.update()
+    return splash
+
+
 def create_gui():
     global root_ref
     global system_status_label, listbox
@@ -557,12 +579,17 @@ def create_gui():
     global vpn_status_label, vpn_listbox
     global vpn_user_var, vpn_pass_var, vpn_pass_entry, vpn_toggle_btn
 
-    load_proxy_list()
-    config = load_ini()
-
+    # メインウィンドウを先に作成し非表示にする（これが Tk ルート）
     root = tk.Tk()
     root_ref = root
     root.title("プロキシｸﾝ")
+    root.withdraw()
+
+    # ── スプラッシュ表示（root の子として）────
+    splash = show_splash(root)
+
+    load_proxy_list()
+    config = load_ini()
 
     # 表示設定を読み込む（BooleanVarはroot生成後に作る必要あり）
     load_visibility(config)
@@ -705,8 +732,12 @@ def create_gui():
     make_btn_row(bat_sec, "ファイルを選択", select_bat_file,
                  "ファイルを実行", run_bat_file)
 
-    # ── 初期表示を適用 ────────────────────────────
+    # ── 初期表示を適用・スプラッシュを閉じてメイン表示 ──
     apply_visibility()
+    splash.destroy()
+    root.deiconify()
+    root.lift()
+    root.focus_force()
 
     root.mainloop()
 
