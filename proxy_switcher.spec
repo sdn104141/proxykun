@@ -1,20 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
-import os, sys
-# customtkinter のデータファイルパスを自動取得
-try:
-    import customtkinter
-    ctk_path = os.path.dirname(customtkinter.__file__)
-    ctk_data = [(ctk_path, 'customtkinter')]
-except ImportError:
-    ctk_data = []
-
 a = Analysis(
     ['proxy_switcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('icon.ico', '.')] + ctk_data,
+    datas=[('icon.ico', '.')],
     hiddenimports=['customtkinter'],
     hookspath=[],
     hooksconfig={},
@@ -36,4 +26,19 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    disable_windowe
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['icon.ico'],
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='proxy_switcher',
+)

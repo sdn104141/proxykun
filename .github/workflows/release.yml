@@ -24,7 +24,15 @@ jobs:
         run: pip install pyinstaller pillow customtkinter
 
       - name: PyInstaller でビルド
-        run: pyinstaller proxy_switcher.spec
+        run: >
+          pyinstaller
+          --noconfirm
+          --onedir
+          --windowed
+          --icon=icon.ico
+          --add-data "icon.ico;."
+          --name proxy_switcher
+          proxy_switcher.py
 
       - name: ZIP 作成
         run: |
@@ -35,4 +43,4 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: proxy
+          files: proxy_switcher.zip

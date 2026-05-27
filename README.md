@@ -30,7 +30,7 @@
 ## 動作環境
 
 - Windows 10 / 11
-- Python 3.x（ソースから実行する場合）
+- Python 3.x + customtkinter（ソースから実行する場合）
 - npm（npmプロキシ機能を使う場合）
 
 ## 使い方
@@ -43,7 +43,10 @@
 
 ### Pythonから直接実行する場合
 
+依存ライブラリをインストールしてから実行します。
+
 ```
+pip install customtkinter
 python proxy_switcher.py
 ```
 
@@ -52,7 +55,7 @@ python proxy_switcher.py
 ### 1. 依存ライブラリのインストール
 
 ```
-pip install pyinstaller Pillow
+pip install pyinstaller customtkinter
 ```
 
 ### 2. ビルド

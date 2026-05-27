@@ -126,7 +126,7 @@ def open_visibility_settings():
     ctk.CTkButton(dialog, text="閉じる",
                   command=dialog.destroy,
                   fg_color=BTN_NEU, hover_color=BTN_NEU_H,
-                  corner_radius=20, height=42, width=130,
+                  corner_radius=16, height=32, width=110,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(pady=(14, 18))
 
 # ─────────────────────────────────────────────────
@@ -633,11 +633,11 @@ def _btn_row(parent, l_txt, l_cmd, r_txt, r_cmd):
     row.pack(pady=(2, 14))
     ctk.CTkButton(row, text=l_txt, command=l_cmd,
                   fg_color=BTN_ON, hover_color=BTN_ON_H,
-                  corner_radius=22, height=44, width=185,
+                  corner_radius=18, height=32, width=155,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.LEFT, padx=6)
     ctk.CTkButton(row, text=r_txt, command=r_cmd,
                   fg_color=BTN_OFF, hover_color=BTN_OFF_H,
-                  corner_radius=22, height=44, width=185,
+                  corner_radius=18, height=32, width=155,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.LEFT, padx=6)
 
 
@@ -688,7 +688,7 @@ def open_visibility_settings():
     ctk.CTkButton(dialog, text="閉じる",
                   command=dialog.destroy,
                   fg_color=BTN_NEU, hover_color=BTN_NEU_H,
-                  corner_radius=20, height=42, width=130,
+                  corner_radius=16, height=32, width=110,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(pady=(14, 18))
 
 
@@ -751,7 +751,7 @@ def create_gui():
 
     # ── ヘッダー ──────────────────────────────────
     header = ctk.CTkFrame(root, fg_color=PANEL_BG,
-                          corner_radius=0, height=64)
+                          corner_radius=0, height=50)
     header.pack(fill=tk.X)
     header.pack_propagate(False)
     ctk.CTkLabel(header, text=APP_NAME,
@@ -761,7 +761,7 @@ def create_gui():
                   command=open_visibility_settings,
                   fg_color=BTN_NEU, hover_color=BTN_NEU_H,
                   text_color="#ffffff",
-                  corner_radius=20, height=38, width=130,
+                  corner_radius=16, height=30, width=112,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(
                       side=tk.RIGHT, padx=14)
 
@@ -853,7 +853,7 @@ def create_gui():
                   command=refresh_vpn_list_ui,
                   fg_color=BTN_NEU, hover_color=BTN_NEU_H,
                   text_color="#ffffff",
-                  corner_radius=16, height=36, width=120,
+                  corner_radius=14, height=28, width=95,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.RIGHT)
 
     vpn_list = get_vpn_list()
@@ -913,7 +913,7 @@ def create_gui():
         command=toggle_password_visibility,
         fg_color=BTN_NEU, hover_color=BTN_NEU_H,
         text_color="#ffffff",
-        corner_radius=14, height=36, width=76,
+        corner_radius=12, height=28, width=62,
         font=ctk.CTkFont("Meiryo UI", 10, "bold"))
     vpn_toggle_btn.pack(side=tk.LEFT)
     _btn_row(vpn_sec, "接続", connect_vpn_action, "切断", disconnect_vpn_action)
