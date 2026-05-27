@@ -61,7 +61,7 @@ pip install pyinstaller customtkinter
 ### 2. ビルド
 
 ```
-pyinstaller proxy_switcher.spec
+pyinstaller --noconfirm --onedir --windowed --icon=icon.ico --add-data "icon.ico;." --hidden-import customtkinter --name proxy_switcher proxy_switcher.py
 ```
 
 ビルド完了後、`dist/proxy_switcher/` フォルダ内に `proxy_switcher.exe` が生成されます。
