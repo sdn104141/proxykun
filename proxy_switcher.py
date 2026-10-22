@@ -8,14 +8,44 @@ except Exception:
     except Exception:
         pass
 
-import winreg
-import customtkinter as ctk
+# tkinter は軽いので先にimportしてスプラッシュを早期表示する
 import tkinter as tk
 from tkinter import messagebox, filedialog
+import os
+
+# ── 早期スプラッシュ（customtkinter importより前に表示）──
+_EARLY_BG     = "#ccddf0"
+_EARLY_PNL    = "#f0f5ff"
+_EARLY_BD     = "#aac4e0"
+_EARLY_TEXT1  = "#1a2540"
+_EARLY_TEXT2  = "#5570a0"
+_EARLY_NAME   = "プロキシｸﾝ"
+
+_early_root   = tk.Tk()
+_early_root.withdraw()
+_early_splash = tk.Toplevel(_early_root)
+_early_splash.overrideredirect(True)
+_early_splash.configure(bg=_EARLY_BG)
+_early_splash.attributes("-topmost", True)
+_ew, _eh = 300, 120
+_esw = _early_splash.winfo_screenwidth()
+_esh = _early_splash.winfo_screenheight()
+_early_splash.geometry(f"{_ew}x{_eh}+{(_esw-_ew)//2}+{(_esh-_eh)//2}")
+_inner = tk.Frame(_early_splash, bg=_EARLY_PNL,
+                  highlightbackground=_EARLY_BD, highlightthickness=2)
+_inner.place(relx=0, rely=0, relwidth=1, relheight=1)
+tk.Label(_inner, text=_EARLY_NAME, font=("Meiryo UI", 22, "bold"),
+         bg=_EARLY_PNL, fg=_EARLY_TEXT1).pack(expand=True, pady=(22, 4))
+tk.Label(_inner, text="読み込み中…", font=("Meiryo UI", 10),
+         bg=_EARLY_PNL, fg=_EARLY_TEXT2).pack(pady=(0, 18))
+_early_splash.update()
+
+# 重いモジュールをスプラッシュ表示後にimport
+import winreg
+import customtkinter as ctk
 import subprocess
 import configparser
 import threading
-import os
 
 # subprocess でコンソールウィンドウを非表示にするフラグ
 NOWND = subprocess.CREATE_NO_WINDOW
@@ -37,8 +67,9 @@ root_ref = None
 SECTION_KEYS = [
     ("systemproxy", "システムプロキシ"),
     ("npmproxy",    "npm プロキシ"),
-    ("envproxy",    "環境変数プロキシ  (Claude Code用)"),
-    ("iplist",      "IPリスト管理"),
+    ("gitproxy",    "git プロキシ"),
+    ("envproxy",    "環境変数プロキシ"),
+    ("iplist",      "IP リスト管理"),
     ("vpn",         "VPN 接続"),
     ("batfile",     "BAT ファイル"),
 ]
@@ -201,7 +232,7 @@ def save_proxy_list():
     save_ini(config)
 
 def refresh_all_listboxes():
-    for lb in (listbox, npm_listbox, env_listbox, mgmt_listbox):
+    for lb in (listbox, npm_listbox, git_listbox, env_listbox, mgmt_listbox):
         lb.delete(0, tk.END)
         for proxy in PROXY_LIST:
             lb.insert(tk.END, proxy)
@@ -254,9 +285,12 @@ def set_npm_proxy():
             messagebox.showwarning("警告", "プロキシを選択してください")
             return
         proxy_url = f"http://{PROXY_LIST[selected[0]]}"
-        subprocess.run(f"npm config set proxy {proxy_url}", check=True, timeout=10, shell=True, creationflags=NOWND)
-        subprocess.run(f"npm config set https-proxy {proxy_url}", check=True, timeout=10, shell=True, creationflags=NOWND)
-        npm_status_label.config(text=f"現在: {proxy_url}")
+        cmd1 = f"npm config set proxy {proxy_url}"
+        cmd2 = f"npm config set https-proxy {proxy_url}"
+        log_command(cmd1); log_command(cmd2)
+        subprocess.run(cmd1, check=True, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run(cmd2, check=True, timeout=10, shell=True, creationflags=NOWND)
+        npm_status_label.config(text=f"現在: {proxy_url}", fg=STATUS_OK)
         messagebox.showinfo("成功", f"npmプロキシを設定しました:\n{proxy_url}")
     except FileNotFoundError:
         messagebox.showerror("エラー", "npmが見つかりません。")
@@ -265,9 +299,12 @@ def set_npm_proxy():
 
 def disable_npm_proxy():
     try:
-        subprocess.run("npm config delete proxy", check=True, timeout=10, shell=True, creationflags=NOWND)
-        subprocess.run("npm config delete https-proxy", check=True, timeout=10, shell=True, creationflags=NOWND)
-        npm_status_label.config(text="現在: 無効")
+        cmd1 = "npm config delete proxy"
+        cmd2 = "npm config delete https-proxy"
+        log_command(cmd1); log_command(cmd2)
+        subprocess.run(cmd1, check=True, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run(cmd2, check=True, timeout=10, shell=True, creationflags=NOWND)
+        npm_status_label.config(text="現在: 無効", fg=STATUS_NG)
         messagebox.showinfo("成功", "npmプロキシを無効にしました")
     except FileNotFoundError:
         messagebox.showerror("エラー", "npmが見つかりません。")
@@ -298,22 +335,86 @@ def set_env_proxy():
             messagebox.showwarning("警告", "プロキシを選択してください")
             return
         proxy_url = f"http://{PROXY_LIST[selected[0]]}"
-        subprocess.run(f'setx HTTP_PROXY "{proxy_url}"', check=True, shell=True, timeout=10)
-        subprocess.run(f'setx HTTPS_PROXY "{proxy_url}"', check=True, shell=True, timeout=10)
-        subprocess.run('setx NODE_USE_ENV_PROXY 1', check=True, shell=True, timeout=10)
-        env_status_label.config(text=f"現在: {proxy_url}")
+        cmd1 = f'setx HTTP_PROXY "{proxy_url}"'
+        cmd2 = f'setx HTTPS_PROXY "{proxy_url}"'
+        cmd3 = 'setx NODE_USE_ENV_PROXY 1'
+        log_command(cmd1); log_command(cmd2); log_command(cmd3)
+        subprocess.run(cmd1, check=True, shell=True, timeout=10)
+        subprocess.run(cmd2, check=True, shell=True, timeout=10)
+        subprocess.run(cmd3, check=True, shell=True, timeout=10)
+        env_status_label.config(text=f"現在: {proxy_url}", fg=STATUS_OK)
         messagebox.showinfo("成功", f"環境変数プロキシを設定しました:\n{proxy_url}\n\n※新しいターミナルを開いてから有効になります")
     except Exception as e:
         messagebox.showerror("エラー", f"環境変数プロキシ設定中にエラーが発生しました: {e}")
 
 def disable_env_proxy():
     try:
-        subprocess.run('setx HTTP_PROXY ""', check=True, shell=True, timeout=10)
-        subprocess.run('setx HTTPS_PROXY ""', check=True, shell=True, timeout=10)
-        env_status_label.config(text="現在: 無効")
+        cmd1 = 'setx HTTP_PROXY ""'
+        cmd2 = 'setx HTTPS_PROXY ""'
+        log_command(cmd1); log_command(cmd2)
+        subprocess.run(cmd1, check=True, shell=True, timeout=10)
+        subprocess.run(cmd2, check=True, shell=True, timeout=10)
+        env_status_label.config(text="現在: 無効", fg=STATUS_NG)
         messagebox.showinfo("成功", "環境変数プロキシを無効にしました\n\n※新しいターミナルを開いてから有効になります")
     except Exception as e:
         messagebox.showerror("エラー", f"環境変数プロキシ無効化中にエラーが発生しました: {e}")
+
+# ─────────────────────────────────────────────────
+# コマンドプレビュー（実行前表示用）
+# ─────────────────────────────────────────────────
+
+cmd_hint_frames = []   # 全セクションのヒントフレームを管理
+
+def log_command(cmd):
+    """互換性維持のため残すが何もしない"""
+    pass
+
+# ─────────────────────────────────────────────────
+# git プロキシ
+# ─────────────────────────────────────────────────
+
+git_status_label = None
+git_listbox = None
+
+def get_git_proxy_status():
+    try:
+        result = subprocess.run("git config --global http.proxy",
+                                capture_output=True, text=True, timeout=5,
+                                shell=True, creationflags=NOWND)
+        value = result.stdout.strip()
+        return value if value else None
+    except Exception:
+        return None
+
+def set_git_proxy():
+    try:
+        selected = git_listbox.curselection()
+        if not selected:
+            messagebox.showwarning("警告", "プロキシを選択してください")
+            return
+        proxy_url = f"http://{PROXY_LIST[selected[0]]}"
+        cmd1 = f"git config --global http.proxy {proxy_url}"
+        cmd2 = f"git config --global https.proxy {proxy_url}"
+        log_command(cmd1); log_command(cmd2)
+        subprocess.run(cmd1, check=True, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run(cmd2, check=True, timeout=10, shell=True, creationflags=NOWND)
+        git_status_label.config(text=f"現在: {proxy_url}", fg=STATUS_OK)
+        messagebox.showinfo("成功", f"git プロキシを設定しました:\n{proxy_url}")
+    except Exception as e:
+        messagebox.showerror("エラー", f"git プロキシ設定中にエラーが発生しました: {e}")
+
+def disable_git_proxy():
+    try:
+        cmd1 = "git config --global --unset http.proxy"
+        cmd2 = "git config --global --unset https.proxy"
+        log_command(cmd1); log_command(cmd2)
+        # --unset は該当キーがなくてもエラーにしない（returncode=5は正常）
+        subprocess.run(cmd1, timeout=10, shell=True, creationflags=NOWND)
+        subprocess.run(cmd2, timeout=10, shell=True, creationflags=NOWND)
+        git_status_label.config(text="現在: 無効", fg=STATUS_NG)
+        messagebox.showinfo("成功", "git プロキシを無効にしました")
+    except Exception as e:
+        messagebox.showerror("エラー", f"git プロキシ無効化中にエラーが発生しました: {e}")
 
 # ─────────────────────────────────────────────────
 # BAT ファイル
@@ -723,11 +824,20 @@ def create_gui():
     global root_ref
     global system_status_label, listbox
     global npm_status_label, npm_listbox
+    global git_status_label, git_listbox
     global env_status_label, env_listbox
     global mgmt_listbox, entry_var
     global bat_label
     global vpn_status_label, vpn_listbox
     global vpn_user_var, vpn_pass_var, vpn_pass_entry, vpn_toggle_btn
+    global cmd_hint_frames
+
+    # 早期スプラッシュを先に閉じてからCTkルートを作成（順序が重要）
+    try:
+        _early_splash.destroy()
+        _early_root.destroy()
+    except Exception:
+        pass
 
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
@@ -763,7 +873,38 @@ def create_gui():
                   text_color="#ffffff",
                   corner_radius=16, height=30, width=112,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(
-                      side=tk.RIGHT, padx=14)
+                      side=tk.RIGHT, padx=4)
+
+    # コマンドプレビュートグルボタン
+    cmd_hint_visible = tk.BooleanVar(value=False)
+    cmd_hint_frames = []
+
+    def toggle_cmd_hints():
+        for f in cmd_hint_frames:
+            if cmd_hint_visible.get():
+                f.pack(fill=tk.X, padx=14, pady=(0, 10))
+            else:
+                f.pack_forget()
+
+    cmd_hint_btn = ctk.CTkButton(header, text="📋 コマンド",
+                  command=lambda: [cmd_hint_visible.set(not cmd_hint_visible.get()), toggle_cmd_hints()],
+                  fg_color=BTN_NEU, hover_color=BTN_NEU_H,
+                  text_color="#ffffff",
+                  corner_radius=16, height=30, width=105,
+                  font=ctk.CTkFont("Meiryo UI", 10, "bold"))
+    cmd_hint_btn.pack(side=tk.RIGHT, padx=(14, 0))
+
+    def _cmd_hint(parent, lines):
+        """コマンドプレビューフレームを作成（初期は非表示）"""
+        f = tk.Frame(parent, bg="#e8f0fc",
+                     highlightbackground=PANEL_BD, highlightthickness=1)
+        for line in lines:
+            tk.Label(f, text=line, bg="#e8f0fc", fg="#334466",
+                     font=("Courier New", 9), anchor="w",
+                     justify="left").pack(fill=tk.X, padx=8, pady=1)
+        cmd_hint_frames.append(f)
+        # 初期は非表示
+        return f
 
     # 区切り線
     ctk.CTkFrame(root, fg_color=PANEL_BD,
@@ -789,23 +930,58 @@ def create_gui():
     _btn_row(proxy_sec,
              "プロキシを設定", set_system_proxy,
              "プロキシを無効化", disable_system_proxy)
+    _cmd_hint(proxy_sec, [
+        "[設定]  レジストリ: HKCU\\...\\Internet Settings",
+        "        ProxyEnable=1 / ProxyServer=<選択IP>",
+        "[無効]  ProxyEnable=0",
+    ])
 
     # ── npm プロキシ ──────────────────────────────
     npm_sec = make_section("npmproxy", "npm プロキシ")
-    cur = get_npm_proxy_status()
-    npm_status_label = _status_lbl(
-        npm_sec,
-        f"現在: {cur}" if cur else "現在: 無効",
-        fg=STATUS_OK if cur else STATUS_NG)
+    npm_status_label = _status_lbl(npm_sec, "確認中…", fg=STATUS_NG)
+    def _load_npm():
+        cur = get_npm_proxy_status()
+        root_ref.after(0, lambda: npm_status_label.config(
+            text=f"現在: {cur}" if cur else "現在: 無効",
+            fg=STATUS_OK if cur else STATUS_NG))
+    threading.Thread(target=_load_npm, daemon=True).start()
     npm_listbox = _make_lb(npm_sec)
     for p in PROXY_LIST:
         npm_listbox.insert(tk.END, p)
     _btn_row(npm_sec,
              "npm プロキシ ON", set_npm_proxy,
              "npm プロキシ OFF", disable_npm_proxy)
+    _cmd_hint(npm_sec, [
+        "[ON]  npm config set proxy http://<選択IP>",
+        "      npm config set https-proxy http://<選択IP>",
+        "[OFF] npm config delete proxy",
+        "      npm config delete https-proxy",
+    ])
+
+    # ── git プロキシ ──────────────────────────────
+    git_sec = make_section("gitproxy", "git プロキシ")
+    git_status_label = _status_lbl(git_sec, "確認中…", fg=STATUS_NG)
+    def _load_git():
+        cur = get_git_proxy_status()
+        root_ref.after(0, lambda: git_status_label.config(
+            text=f"現在: {cur}" if cur else "現在: 無効",
+            fg=STATUS_OK if cur else STATUS_NG))
+    threading.Thread(target=_load_git, daemon=True).start()
+    git_listbox = _make_lb(git_sec)
+    for p in PROXY_LIST:
+        git_listbox.insert(tk.END, p)
+    _btn_row(git_sec,
+             "git プロキシ ON", set_git_proxy,
+             "git プロキシ OFF", disable_git_proxy)
+    _cmd_hint(git_sec, [
+        "[ON]  git config --global http.proxy http://<選択IP>",
+        "      git config --global https.proxy http://<選択IP>",
+        "[OFF] git config --global --unset http.proxy",
+        "      git config --global --unset https.proxy",
+    ])
 
     # ── 環境変数プロキシ ──────────────────────────
-    env_sec = make_section("envproxy", "環境変数プロキシ  (Claude Code用)")
+    env_sec = make_section("envproxy", "環境変数プロキシ")
     cur = get_env_proxy_status()
     env_status_label = _status_lbl(
         env_sec,
@@ -817,6 +993,13 @@ def create_gui():
     _btn_row(env_sec,
              "環境変数 ON", set_env_proxy,
              "環境変数 OFF", disable_env_proxy)
+    _cmd_hint(env_sec, [
+        '[ON]  setx HTTP_PROXY "http://<選択IP>"',
+        '      setx HTTPS_PROXY "http://<選択IP>"',
+        '      setx NODE_USE_ENV_PROXY 1',
+        '[OFF] setx HTTP_PROXY ""',
+        '      setx HTTPS_PROXY ""',
+    ])
 
     # ── IP リスト管理 ─────────────────────────────
     mgmt_sec = make_section("iplist", "IP リスト管理")
@@ -840,15 +1023,20 @@ def create_gui():
     vpn_sec = make_section("vpn", "VPN 接続")
     vrow = ctk.CTkFrame(vpn_sec, fg_color="transparent")
     vrow.pack(fill=tk.X, padx=14, pady=(4, 4))
-    cur = get_vpn_connection_status()
     vpn_status_label = tk.Label(
         vrow,
-        text=f"接続中: {cur}" if cur else "現在: 未接続",
+        text="確認中…",
         anchor="w", bg=PANEL_BG,
-        fg=STATUS_OK if cur else STATUS_NG,
+        fg=STATUS_NG,
         font=("Meiryo UI", 11, "bold"),
         cursor="arrow")
     vpn_status_label.pack(side=tk.LEFT)
+    def _load_vpn_status():
+        cur = get_vpn_connection_status()
+        root_ref.after(0, lambda: vpn_status_label.config(
+            text=f"接続中: {cur}" if cur else "現在: 未接続",
+            fg=STATUS_OK if cur else STATUS_NG))
+    threading.Thread(target=_load_vpn_status, daemon=True).start()
     ctk.CTkButton(vrow, text="一覧を更新",
                   command=refresh_vpn_list_ui,
                   fg_color=BTN_NEU, hover_color=BTN_NEU_H,
@@ -856,29 +1044,20 @@ def create_gui():
                   corner_radius=14, height=28, width=95,
                   font=ctk.CTkFont("Meiryo UI", 10, "bold")).pack(side=tk.RIGHT)
 
-    vpn_list = get_vpn_list()
     vpn_lb_f = ctk.CTkFrame(vpn_sec, fg_color=LB_BG,
                              corner_radius=10,
                              border_width=1, border_color=PANEL_BD)
     vpn_listbox = tk.Listbox(
         vpn_lb_f,
         selectmode=tk.SINGLE,
-        width=42, height=max(len(vpn_list) if vpn_list else 1, 3),
+        width=42, height=3,
         bg=LB_BG, fg=TEXT1,
         selectbackground=LB_SEL, selectforeground="#ffffff",
         activestyle="none", relief="flat", bd=0,
         font=("Meiryo UI", 11), highlightthickness=0)
-    if vpn_list:
-        for name in vpn_list:
-            vpn_listbox.insert(tk.END, name)
-    else:
-        vpn_listbox.insert(tk.END, "（VPN接続が見つかりません）")
+    vpn_listbox.insert(tk.END, "取得中…")
     vpn_listbox.pack(padx=5, pady=5, fill=tk.X)
     vpn_lb_f.pack(pady=(2, 8), fill=tk.X, padx=14)
-
-    saved = config["Settings"].get("vpnname", "")
-    if saved in vpn_list:
-        vpn_listbox.selection_set(vpn_list.index(saved))
 
     def _inp(parent, label_text, var, show=""):
         row = ctk.CTkFrame(parent, fg_color="transparent")
@@ -917,6 +1096,11 @@ def create_gui():
         font=ctk.CTkFont("Meiryo UI", 10, "bold"))
     vpn_toggle_btn.pack(side=tk.LEFT)
     _btn_row(vpn_sec, "接続", connect_vpn_action, "切断", disconnect_vpn_action)
+    _cmd_hint(vpn_sec, [
+        "[接続] RasSetCredentialsW(<VPN名>, user, pass)",
+        "       rasphone -d <VPN名>",
+        "[切断] rasdial <VPN名> /disconnect",
+    ])
 
     # ── BAT ファイル ──────────────────────────────
     bat_sec = make_section("batfile", "BAT ファイル")
@@ -932,9 +1116,11 @@ def create_gui():
              "\u30d5\u30a1\u30a4\u30eb\u3092\u9078\u629e", select_bat_file,
              "\u30d5\u30a1\u30a4\u30eb\u3092\u5b9f\u884c", run_bat_file)
 
-    # \u2500\u2500 \u521d\u671f\u8868\u793a \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    # \u2500\u2500 \u521d\u671f\u8868\u793a \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     apply_visibility()
     splash.destroy()
+    # VPN\u30ea\u30b9\u30c8\u3092\u975e\u540c\u671f\u53d6\u5f97\uff08\u8d77\u52d5\u901f\u5ea6\u5411\u4e0a\uff09
+    root.after(50, refresh_vpn_list_ui)
     root.after(20, root.deiconify)
     root.after(30, root.lift)
     root.after(30, root.focus_force)
